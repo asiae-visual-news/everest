@@ -493,6 +493,16 @@ footer{position:relative;z-index:5;background:var(--ink);padding:clamp(46px,8vh,
   .fig span.glint,#xsvg .glints path,.src-card:hover::after{animation:none}
   .js .beat{filter:none}
 }
+
+/* ═════ 장면 사이를 밀어 올리지 않는다(신발 편 59차와 같은 방식) ═════
+   막끼리 한 화면+여유(--xb)만큼 겹쳐 두고, 다음 막은 --xb를 스크롤하는 동안 같은 자리에서 0→1로 뜬다.
+   다 뜬 순간 앞 막이 풀려 뒤로 빠지므로 밀려 올라가는 모습이 보이지 않는다 */
+:root{--xb:20vh}
+html.xf main>.act+.act{margin-top:calc(-100vh - var(--xb))}
+html.xf main>.act:not(.xon){pointer-events:none}
+html.xf main>.act>.xs{opacity:0;visibility:hidden}
+/* 과거·지금 비교 막대의 자동 시연은 장면이 실제로 뜰 때 시작한다 */
+html.xf main>.act:not(.xon) .compare{display:none}
 </style>
 <script>document.documentElement.classList.add("js");</script>
 </head>
@@ -2293,6 +2303,50 @@ if (reduce) {
   addEventListener("resize", req);
   req();
 }
+})();
+</script>
+<script>
+/* 장면 사이를 밀어 올리지 않는다(신발 편 59차와 같은 방식).
+   둘째 막부터, 막 윗변이 화면 맨 위에 닿으면 --xb만큼 스크롤하는 동안 같은 자리에서 0→1로 뜬다.
+   진행선 장 눈금을 누르면 겹친 만큼 더 내려가, 그 장이 다 떠오른 자리로 간다 */
+(function(){
+  var root=document.documentElement, main=document.querySelector('main');
+  if(!main) return;
+  var acts=Array.prototype.filter.call(main.children,function(el){ return el.classList.contains('act')&&el.firstElementChild; });
+  if(acts.length<2) return;
+  var probe=document.createElement('div');
+  probe.setAttribute('aria-hidden','true');
+  probe.style.cssText='position:absolute;top:0;left:0;width:1px;height:var(--xb);visibility:hidden;pointer-events:none';
+  document.body.appendChild(probe);
+  var secs=acts.slice(1).map(function(s){ var st=s.firstElementChild; st.classList.add('xs'); return {s:s,st:st,o:-1}; });
+  acts[0].classList.add('xon');
+  root.classList.add('xf');
+  var XB=1, queued=false, navT=0;
+  function measure(){ XB=Math.max(1,probe.offsetHeight||innerHeight*.2); }
+  function update(){
+    queued=false;
+    secs.forEach(function(x){
+      var top=x.s.getBoundingClientRect().top, o=top>0?0:Math.round(Math.min(1,-top/XB)*1000)/1000;
+      x.s.classList.toggle('xon',top<=1);
+      if(o===x.o) return;
+      x.o=o; x.st.style.opacity=o; x.st.style.visibility=o>0?'visible':'hidden';
+    });
+  }
+  function queue(){ if(!queued){ queued=true; requestAnimationFrame(update); } }
+  addEventListener('scroll',queue,{passive:true});
+  addEventListener('resize',function(){ measure(); queue(); },{passive:true});
+  var chap=document.getElementById('chap');
+  if(chap) chap.addEventListener('click',function(e){
+    var a=e.target.closest&&e.target.closest('a[href^="#"]'); if(!a) return;
+    var el=document.getElementById(a.getAttribute('href').slice(1)); if(!el) return;
+    e.preventDefault(); e.stopPropagation();
+    window.__nav=true; clearTimeout(navT); navT=setTimeout(function(){ window.__nav=false; },1800);
+    var top=el.offsetTop+(acts.indexOf(el)>0?XB:0)+2, mx=Math.max(1,root.scrollHeight-innerHeight);
+    if(window.__everDriven&&window.__everSend) window.__everSend({type:'ever:goto',progress:Math.min(1,top/mx)});
+    else scrollTo({top:top,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+  },true);
+  measure(); update();
+  dispatchEvent(new Event('scroll'));
 })();
 </script>
 </body>
